@@ -9,14 +9,23 @@
 
 #include <MySensors.h>  
 #include <SimpleDHT.h>
+#include <DallasTemperature.h>
+#include <OneWire.h>
 
 // Define DHT sensor
 static const byte DHT_DATA_PIN = 14;
 SimpleDHT11 gDHTSensor;
 
+// Define Dallas sensor
+static const byte ONE_WIRE_BUS_PIN = 4;
+OneWire oneWire(ONE_WIRE_BUS_PIN);
+DallasTemperature DallasTSens(&oneWire);
+
+
 // Sensor global variables (last known values)
 byte gTemperature = 0;
 byte gHumidity = 0;
+float gTemperatureDallas = 0;
 
 // RGB pins setup
 static const byte PIN_LED_R = 3;
@@ -31,6 +40,7 @@ static const uint64_t UPDATE_INTERVAL = 6000;
 static const byte CHILD_ID_HUM  = 0;
 static const byte CHILD_ID_TEMP = 1;
 static const byte CHILD_ID_RGB  = 2;
+static const byte CHILD_ID_TEMP_D = 3;
 
 // metric values?
 bool gMetric = true;
@@ -38,15 +48,20 @@ bool gMetric = true;
 // message definitions
 MyMessage msgHum(CHILD_ID_HUM, V_HUM);
 MyMessage msgTemp(CHILD_ID_TEMP, V_TEMP);
+MyMessage msgTempD(CHILD_ID_TEMP_D, V_TEMP);
 
 void before()
 {
+  // Initialize LEDs
   pinMode(PIN_LED_R, OUTPUT);
   pinMode(PIN_LED_G, OUTPUT);
   pinMode(PIN_LED_B, OUTPUT);
   digitalWrite(PIN_LED_R, 1);
   digitalWrite(PIN_LED_G, 1);
   digitalWrite(PIN_LED_B, 1);
+
+  // Start Dallas sensor
+  DallasTSens.begin();
 }
 
 void presentation()  
@@ -58,6 +73,7 @@ void presentation()
   present(CHILD_ID_HUM, S_HUM);
   present(CHILD_ID_TEMP, S_TEMP);
   present(CHILD_ID_RGB, S_RGB_LIGHT);
+  present(CHILD_ID_TEMP_D, S_TEMP);
 
   // check if we use metric values
   gMetric = getControllerConfig().isMetric;
@@ -92,11 +108,18 @@ void loop()
   // Get temperature from DHT library
   byte temp = 0;
   byte hum = 0;
+  float d_temp = 0;
   if (gDHTSensor.read(DHT_DATA_PIN, &temp, &hum, NULL) == SimpleDHTErrSuccess)
   {
     // check if data needs to be updated
     if (temp!=gTemperature) send(msgTemp.set(gTemperature=temp, 1)); 
     if (hum!=gHumidity)     send(msgHum.set(gHumidity=hum, 1));
   }
+
+  // Get temperature from Dallas sensors
+  DallasTSens.requestTemperatures();
+  d_temp = DallasTSens.getTempCByIndex(0);
+  if (d_temp!=gTemperatureDallas) send(msgTempD.set(gTemperatureDallas=d_temp,1));
+  
   wait(UPDATE_INTERVAL); 
 }
